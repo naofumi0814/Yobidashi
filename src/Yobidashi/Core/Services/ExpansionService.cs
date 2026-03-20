@@ -24,7 +24,12 @@ public class ExpansionService : IDisposable
     private volatile bool _isExpanding; // 展開中フラグ（自前の入力を無視する）
     private bool _wasComposing; // IME未確定状態の追跡
     private string _lastCompositionText = string.Empty; // 最後に取得した未確定文字列
+    private string _compositionReading = string.Empty; // IME変換前のひらがな読み
     private HashSet<string> _excludedProcesses = new();
+
+    // スキャンコード定数（物理キー識別用）
+    private const uint SC_SPACE = 0x39;
+    private const uint SC_TAB = 0x0F;
 
     /// <summary>展開成功時イベント</summary>
     public event Action<Snippet>? SnippetExpanded;
@@ -92,7 +97,7 @@ public class ExpansionService : IDisposable
         _excludedProcesses = _excludedAppRepository.GetProcessNames();
     }
 
-    private void OnKeyDown(uint vkCode, bool isInjected)
+    private void OnKeyDown(uint vkCode, uint scanCode, bool isInjected)
     {
         // 自前の入力は無視
         if (isInjected || _isExpanding) return;
@@ -117,6 +122,13 @@ public class ExpansionService : IDisposable
             if (!string.IsNullOrEmpty(compText))
             {
                 _lastCompositionText = compText;
+
+                // ひらがな/カタカナのみの場合は読みとして保存
+                // （変換後の漢字テキストで上書きしない）
+                if (IsKanaOnly(compText))
+                {
+                    _compositionReading = compText;
+                }
             }
             _wasComposing = true;
             return; // 未確定中はキー処理しない
@@ -127,37 +139,59 @@ public class ExpansionService : IDisposable
         {
             _wasComposing = false;
 
-            // 確定文字列を取得してバッファに追加
+            // 確定文字列を取得
             var resultText = _imeDetector.GetResultText();
-            var textToBuffer = !string.IsNullOrEmpty(resultText) ? resultText : _lastCompositionText;
+            var displayText = !string.IsNullOrEmpty(resultText) ? resultText : _lastCompositionText;
 
-            if (!string.IsNullOrEmpty(textToBuffer))
+            // 読みテキスト: 保存されたひらがなを使用、なければ表示テキスト
+            var readingText = !string.IsNullOrEmpty(_compositionReading) ? _compositionReading : displayText;
+
+            if (!string.IsNullOrEmpty(displayText))
             {
-                foreach (var ch in textToBuffer)
-                {
-                    _triggerDetector.AddChar(ch);
-                }
+                _triggerDetector.AddConfirmedText(displayText, readingText);
             }
             _lastCompositionText = string.Empty;
+            _compositionReading = string.Empty;
 
-            // Enter/Escでの確定の場合、バッファクリアせずにreturn
-            // （確定直後のEnter/Escは展開トリガーではなくIME操作）
+            // Enter/Escでの確定の場合
             if (vkCode == NativeMethods.VK_RETURN)
             {
                 return;
             }
             if (vkCode == NativeMethods.VK_ESCAPE)
             {
-                // Escでの取り消しの場合、バッファもクリア
                 _triggerDetector.ClearBuffer();
-                _lastCompositionText = string.Empty;
+                return;
+            }
+
+            // VK_PROCESSKEYの場合、スキャンコードで実際のキーを判定
+            // IME確定と同時に押されたキーがSpace/Tabならトリガー判定へ
+            if (vkCode == NativeMethods.VK_PROCESSKEY)
+            {
+                if (scanCode == SC_SPACE || scanCode == SC_TAB)
+                {
+                    _triggerDetector.CheckTrigger();
+                }
                 return;
             }
             // Space/Tab等の場合はそのまま下のswitch文に流す（トリガー判定へ）
         }
 
+        // VK_PROCESSKEYをスキャンコードで解決
+        // IMEオン時、未確定なしでSpaceが押された場合に対応
+        uint effectiveVk = vkCode;
+        if (vkCode == NativeMethods.VK_PROCESSKEY)
+        {
+            effectiveVk = scanCode switch
+            {
+                SC_SPACE => NativeMethods.VK_SPACE,
+                SC_TAB => NativeMethods.VK_TAB,
+                _ => vkCode
+            };
+        }
+
         // キー処理
-        switch (vkCode)
+        switch (effectiveVk)
         {
             case NativeMethods.VK_SPACE:
             case NativeMethods.VK_TAB:
@@ -176,16 +210,19 @@ public class ExpansionService : IDisposable
                 break;
 
             default:
+                // VK_PROCESSKEYのままの場合は無視
+                if (effectiveVk == NativeMethods.VK_PROCESSKEY) break;
+
                 // 文字キーの場合、バッファに追加
-                var c = VkCodeToChar(vkCode);
+                var c = VkCodeToChar(effectiveVk);
                 if (c.HasValue)
                 {
                     _triggerDetector.AddChar(c.Value);
                 }
                 else
                 {
-                    // VK_PROCESSKEY以外の制御キーの場合はバッファクリア
-                    if (vkCode != NativeMethods.VK_PROCESSKEY && IsNavigationKey(vkCode))
+                    // 制御キー（矢印等）の場合はバッファクリア
+                    if (IsNavigationKey(effectiveVk))
                     {
                         _triggerDetector.ClearBuffer();
                     }
@@ -194,7 +231,7 @@ public class ExpansionService : IDisposable
         }
     }
 
-    private async void OnTriggerMatched(Snippet snippet, int triggerLength)
+    private async void OnTriggerMatched(Snippet snippet, int displayLength)
     {
         if (_isExpanding) return;
 
@@ -203,7 +240,7 @@ public class ExpansionService : IDisposable
             _isExpanding = true;
             StatusMessage?.Invoke($"展開中: {snippet.Title}");
 
-            await _textExpander.ExpandAsync(snippet.Body, triggerLength);
+            await _textExpander.ExpandAsync(snippet.Body, displayLength);
 
             // 使用回数を記録
             var appName = _imeDetector.GetForegroundProcessName();
@@ -307,12 +344,6 @@ public class ExpansionService : IDisposable
             return (char)(vkCode - 0x60 + '0');
         }
 
-        // 注: 日本語入力の場合、VK_PROCESSKEYが送られてくる
-        // 確定後の文字取得はWM_CHARメッセージで行う必要がある
-        // WH_KEYBOARD_LL では直接取得できないため、
-        // 日本語文字のバッファリングにはTextServicesFramework等の
-        // 別メカニズムを使う設計とする
-
         return null;
     }
 
@@ -322,6 +353,26 @@ public class ExpansionService : IDisposable
             or NativeMethods.VK_UP or NativeMethods.VK_DOWN
             or 0x21 or 0x22 // Page Up/Down
             or 0x23 or 0x24; // End/Home
+    }
+
+    /// <summary>
+    /// 文字列がひらがな/カタカナのみで構成されているか判定
+    /// IME変換前の読み（ひらがな）を検出するために使用
+    /// </summary>
+    private static bool IsKanaOnly(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return false;
+        foreach (var c in text)
+        {
+            if (!((c >= '\u3040' && c <= '\u309F') ||  // ひらがな
+                  (c >= '\u30A0' && c <= '\u30FF') ||  // カタカナ
+                  (c >= '\uFF65' && c <= '\uFF9F') ||  // 半角カタカナ
+                  c == 'ー' || c == '～'))
+            {
+                return false;
+            }
+        }
+        return true;
     }
 
     public void Dispose()

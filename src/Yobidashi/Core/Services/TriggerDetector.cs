@@ -1,3 +1,4 @@
+using System.Text;
 using Yobidashi.Data.Models;
 using Yobidashi.Data.Repositories;
 
@@ -7,15 +8,20 @@ namespace Yobidashi.Core.Services;
 /// トリガー文字列の検知とバッファ管理
 /// 確定済み文字列のみをバッファに蓄積し、
 /// Space/Tabが押されたときにトリガー判定を行う
+///
+/// 日本語IME対応:
+/// - 各入力セグメントは「画面表示テキスト」と「読みテキスト」を持つ
+/// - トリガー照合は読みテキストで行い、削除文字数は画面表示テキストで計算する
+/// - 例: "署名"(表示2文字) の読み "しょめい"(4文字) でトリガー判定
 /// </summary>
 public class TriggerDetector
 {
-    private readonly List<char> _buffer = new();
+    private readonly List<InputSegment> _segments = new();
     private readonly SnippetRepository _snippetRepository;
     private readonly ITextNormalizer _normalizer;
     private readonly int _maxBufferSize;
 
-    /// <summary>トリガーが一致した時に発火（Snippet, トリガー文字数）</summary>
+    /// <summary>トリガーが一致した時に発火（Snippet, 画面上の削除文字数）</summary>
     public event Action<Snippet, int>? TriggerMatched;
 
     public TriggerDetector(SnippetRepository snippetRepository, ITextNormalizer normalizer, int maxBufferSize = 100)
@@ -26,25 +32,48 @@ public class TriggerDetector
     }
 
     /// <summary>
-    /// 確定済み文字をバッファに追加
+    /// 入力セグメント: 画面表示テキストと読み（ひらがな）をペアで保持
     /// </summary>
-    public void AddChar(char c)
+    private struct InputSegment
     {
-        _buffer.Add(c);
-        if (_buffer.Count > _maxBufferSize)
-        {
-            _buffer.RemoveAt(0);
-        }
+        public string DisplayText;  // 画面に表示されるテキスト（漢字等）
+        public string ReadingText;  // トリガー照合用の読み（ひらがな）
     }
 
     /// <summary>
-    /// バッファからテキストを削除（BackSpace等）
+    /// ASCII文字をバッファに追加（直接入力文字）
+    /// </summary>
+    public void AddChar(char c)
+    {
+        var s = c.ToString();
+        _segments.Add(new InputSegment { DisplayText = s, ReadingText = s });
+        TrimBuffer();
+    }
+
+    /// <summary>
+    /// IME確定テキストをバッファに追加
+    /// </summary>
+    /// <param name="displayText">画面に表示されるテキスト（例: "署名"）</param>
+    /// <param name="readingText">ひらがなの読み（例: "しょめい"）</param>
+    public void AddConfirmedText(string displayText, string readingText)
+    {
+        if (string.IsNullOrEmpty(displayText) && string.IsNullOrEmpty(readingText)) return;
+        _segments.Add(new InputSegment
+        {
+            DisplayText = displayText ?? readingText,
+            ReadingText = readingText ?? displayText ?? string.Empty
+        });
+        TrimBuffer();
+    }
+
+    /// <summary>
+    /// バッファから最後のセグメントを削除（BackSpace等）
     /// </summary>
     public void RemoveLastChar()
     {
-        if (_buffer.Count > 0)
+        if (_segments.Count > 0)
         {
-            _buffer.RemoveAt(_buffer.Count - 1);
+            _segments.RemoveAt(_segments.Count - 1);
         }
     }
 
@@ -53,46 +82,49 @@ public class TriggerDetector
     /// </summary>
     public void ClearBuffer()
     {
-        _buffer.Clear();
+        _segments.Clear();
     }
 
     /// <summary>
     /// Space/Tabが押されたときにトリガー判定を実行
-    /// バッファの末尾から単語を切り出してトリガーと照合する
+    /// 読みバッファの末尾からトリガーと照合し、一致したら画面上の削除文字数を返す
     /// </summary>
     public bool CheckTrigger()
     {
-        if (_buffer.Count == 0) return false;
+        if (_segments.Count == 0) return false;
 
-        // バッファの内容を文字列として取得
-        var bufferText = new string(_buffer.ToArray());
+        // 読みテキストを結合
+        var readingBuilder = new StringBuilder();
+        foreach (var seg in _segments)
+        {
+            readingBuilder.Append(seg.ReadingText);
+        }
+        var readingText = readingBuilder.ToString();
 
-        // 末尾の空白を除去し、最後の「単語」を抽出
-        // 日本語の場合、区切り文字なしで連続するため、
-        // 登録されたトリガー文字列と末尾マッチで判定する
         var enabledSnippets = _snippetRepository.GetEnabled();
         foreach (var snippet in enabledSnippets)
         {
             var trigger = snippet.TriggerText;
             if (string.IsNullOrEmpty(trigger)) continue;
 
-            // 正規化して比較
-            var normalizedBuffer = _normalizer.Normalize(bufferText);
+            // 正規化して比較（読みテキスト同士）
+            var normalizedReading = _normalizer.Normalize(readingText);
             var normalizedTrigger = _normalizer.Normalize(trigger);
 
-            if (normalizedBuffer.EndsWith(normalizedTrigger))
+            if (normalizedReading.EndsWith(normalizedTrigger))
             {
-                // バッファの末尾がトリガーと一致
-                int triggerStart = normalizedBuffer.Length - normalizedTrigger.Length;
+                int triggerStart = normalizedReading.Length - normalizedTrigger.Length;
 
                 // 誤爆防止: トリガーの前が行頭、空白、句読点、
                 // または非ASCII文字（日本語は単語間にスペースがないため常に許可）
                 if (triggerStart == 0 ||
-                    char.IsWhiteSpace(normalizedBuffer[triggerStart - 1]) ||
-                    IsPunctuation(normalizedBuffer[triggerStart - 1]) ||
-                    normalizedBuffer[triggerStart - 1] > 0x7F)
+                    char.IsWhiteSpace(normalizedReading[triggerStart - 1]) ||
+                    IsPunctuation(normalizedReading[triggerStart - 1]) ||
+                    normalizedReading[triggerStart - 1] > 0x7F)
                 {
-                    TriggerMatched?.Invoke(snippet, trigger.Length);
+                    // 画面上の削除文字数を計算（セグメントを末尾から遡る）
+                    int displayLength = CalculateDisplayLength(normalizedTrigger.Length);
+                    TriggerMatched?.Invoke(snippet, displayLength);
                     ClearBuffer();
                     return true;
                 }
@@ -103,11 +135,53 @@ public class TriggerDetector
     }
 
     /// <summary>
+    /// 読み文字数に対応する画面表示文字数を計算
+    /// セグメントを末尾から遡って、必要な読み文字数分の表示文字数を合算する
+    /// </summary>
+    private int CalculateDisplayLength(int readingCharsNeeded)
+    {
+        int displayLen = 0;
+        int readingLen = 0;
+
+        for (int i = _segments.Count - 1; i >= 0 && readingLen < readingCharsNeeded; i--)
+        {
+            var seg = _segments[i];
+            readingLen += seg.ReadingText.Length;
+            displayLen += seg.DisplayText.Length;
+        }
+
+        return displayLen;
+    }
+
+    /// <summary>
+    /// バッファサイズを制限
+    /// </summary>
+    private void TrimBuffer()
+    {
+        int totalReading = 0;
+        foreach (var seg in _segments)
+        {
+            totalReading += seg.ReadingText.Length;
+        }
+
+        while (totalReading > _maxBufferSize && _segments.Count > 0)
+        {
+            totalReading -= _segments[0].ReadingText.Length;
+            _segments.RemoveAt(0);
+        }
+    }
+
+    /// <summary>
     /// 現在のバッファ内容を取得（デバッグ用）
     /// </summary>
     public string GetBufferContent()
     {
-        return new string(_buffer.ToArray());
+        var sb = new StringBuilder();
+        foreach (var seg in _segments)
+        {
+            sb.Append(seg.ReadingText);
+        }
+        return sb.ToString();
     }
 
     private static bool IsPunctuation(char c)

@@ -14,8 +14,8 @@ public class GlobalKeyboardHook : IDisposable
     private readonly NativeMethods.LowLevelKeyboardProc _proc;
     private bool _disposed;
 
-    /// <summary>キーダウンイベント（vkCode, isInjected）</summary>
-    public event Action<uint, bool>? KeyDown;
+    /// <summary>キーダウンイベント（vkCode, scanCode, isInjected）</summary>
+    public event Action<uint, uint, bool>? KeyDown;
 
     /// <summary>キーアップイベント（vkCode）</summary>
     public event Action<uint>? KeyUp;
@@ -75,7 +75,7 @@ public class GlobalKeyboardHook : IDisposable
                     return (IntPtr)1; // キー入力を抑制
                 }
 
-                KeyDown?.Invoke(hookStruct.vkCode, isInjected);
+                KeyDown?.Invoke(hookStruct.vkCode, hookStruct.scanCode, isInjected);
             }
             else if (msg == NativeMethods.WM_KEYUP || msg == NativeMethods.WM_SYSKEYUP)
             {

@@ -29,6 +29,9 @@ public class TextNormalizer : ITextNormalizer
         // 全角英数字 → 半角英数字
         result = NormalizeAlphanumeric(result);
 
+        // カタカナ → ひらがな（トリガー照合の統一のため）
+        result = KatakanaToHiragana(result);
+
         return result;
     }
 
