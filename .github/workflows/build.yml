@@ -29,12 +29,18 @@ jobs:
         run: dotnet publish src/Yobidashi/Yobidashi.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o publish
 
       - name: Create self-signed certificate and sign exe
+        continue-on-error: true
         run: |
           $cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject "CN=Yobidashi Project" -CertStoreLocation Cert:\CurrentUser\My -NotAfter (Get-Date).AddYears(5)
           $pwd = ConvertTo-SecureString -String "YobidashiSign2024" -Force -AsPlainText
           Export-PfxCertificate -Cert $cert -FilePath sign.pfx -Password $pwd
-          & "C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\signtool.exe" sign /f sign.pfx /p YobidashiSign2024 /fd SHA256 /t http://timestamp.digicert.com publish\Yobidashi.exe
-          Remove-Item sign.pfx
+          $signtool = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits" -Recurse -Filter "signtool.exe" -ErrorAction SilentlyContinue | Where-Object { $_.FullName -like "*x64*" } | Select-Object -First 1
+          if ($signtool) {
+            & $signtool.FullName sign /f sign.pfx /p YobidashiSign2024 /fd SHA256 /t http://timestamp.digicert.com publish\Yobidashi.exe
+          } else {
+            Write-Warning "signtool.exe not found, skipping signing"
+          }
+          if (Test-Path sign.pfx) { Remove-Item sign.pfx }
         shell: pwsh
 
       - name: Upload artifact
