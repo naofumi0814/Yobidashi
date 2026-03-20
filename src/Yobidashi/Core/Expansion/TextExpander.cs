@@ -116,19 +116,24 @@ public class TextExpander
 
     private async Task PasteTextAsync(string text)
     {
+        // クリップボード操作はSTAスレッド（UIスレッド）で実行する必要がある
+        var dispatcher = Application.Current?.Dispatcher;
+
         // 元のクリップボード内容を保存
         string? previousClipboard = null;
         try
         {
-            if (Clipboard.ContainsText())
+            previousClipboard = dispatcher?.Invoke(() =>
             {
-                previousClipboard = Clipboard.GetText();
-            }
+                if (Clipboard.ContainsText())
+                    return Clipboard.GetText();
+                return (string?)null;
+            });
         }
         catch { }
 
         // テキストをクリップボードにセット
-        Clipboard.SetText(text);
+        dispatcher?.Invoke(() => Clipboard.SetText(text));
         await Task.Delay(30);
 
         // Ctrl+V を送信
@@ -140,7 +145,7 @@ public class TextExpander
         {
             try
             {
-                Clipboard.SetText(previousClipboard);
+                dispatcher?.Invoke(() => Clipboard.SetText(previousClipboard));
             }
             catch { }
         }

@@ -97,6 +97,8 @@ internal static class NativeMethods
     public static extern int ImmGetCompositionString(IntPtr hIMC, uint dwIndex, byte[]? lpBuf, uint dwBufLen);
 
     public const uint GCS_COMPSTR = 0x0008;
+    public const uint GCS_RESULTSTR = 0x0800;
+    public const ushort VK_PROCESSKEY = 0xE5;
 
     // フォアグラウンドウィンドウ
     [DllImport("user32.dll")]

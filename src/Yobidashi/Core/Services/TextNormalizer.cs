@@ -20,10 +20,8 @@ public class TextNormalizer : ITextNormalizer
     {
         if (string.IsNullOrEmpty(input)) return string.Empty;
 
-        var result = input.Trim();
-
         // 前後の空白除去
-        result = result.Trim();
+        var result = input.Trim();
 
         // 大文字小文字の統一（英数字部分）
         result = result.ToLowerInvariant();

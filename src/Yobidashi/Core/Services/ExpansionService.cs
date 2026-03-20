@@ -21,7 +21,9 @@ public class ExpansionService : IDisposable
     private readonly SettingsRepository _settingsRepository;
 
     private bool _isPaused;
-    private bool _isExpanding; // 展開中フラグ（自前の入力を無視する）
+    private volatile bool _isExpanding; // 展開中フラグ（自前の入力を無視する）
+    private bool _wasComposing; // IME未確定状態の追跡
+    private string _lastCompositionText = string.Empty; // 最後に取得した未確定文字列
     private HashSet<string> _excludedProcesses = new();
 
     /// <summary>展開成功時イベント</summary>
@@ -39,6 +41,7 @@ public class ExpansionService : IDisposable
         set
         {
             _isPaused = value;
+            _settingsRepository.SetBool("is_paused", value);
             PauseStateChanged?.Invoke(value);
             StatusMessage?.Invoke(value ? "一時停止中" : "監視中");
         }
@@ -104,8 +107,54 @@ public class ExpansionService : IDisposable
         // パスワードフィールド判定
         if (_imeDetector.IsPasswordField()) return;
 
-        // IME未確定中は入力をバッファに追加しない
-        if (_imeDetector.IsComposing()) return;
+        // IME状態の判定
+        bool isComposing = _imeDetector.IsComposing();
+
+        if (isComposing)
+        {
+            // IME未確定中: 未確定文字列を追跡して保存
+            var compText = _imeDetector.GetCompositionText();
+            if (!string.IsNullOrEmpty(compText))
+            {
+                _lastCompositionText = compText;
+            }
+            _wasComposing = true;
+            return; // 未確定中はキー処理しない
+        }
+
+        // IME確定検出: 前回未確定中だったが今回は確定済み → テキストが確定された
+        if (_wasComposing)
+        {
+            _wasComposing = false;
+
+            // 確定文字列を取得してバッファに追加
+            var resultText = _imeDetector.GetResultText();
+            var textToBuffer = !string.IsNullOrEmpty(resultText) ? resultText : _lastCompositionText;
+
+            if (!string.IsNullOrEmpty(textToBuffer))
+            {
+                foreach (var ch in textToBuffer)
+                {
+                    _triggerDetector.AddChar(ch);
+                }
+            }
+            _lastCompositionText = string.Empty;
+
+            // Enter/Escでの確定の場合、バッファクリアせずにreturn
+            // （確定直後のEnter/Escは展開トリガーではなくIME操作）
+            if (vkCode == NativeMethods.VK_RETURN)
+            {
+                return;
+            }
+            if (vkCode == NativeMethods.VK_ESCAPE)
+            {
+                // Escでの取り消しの場合、バッファもクリア
+                _triggerDetector.ClearBuffer();
+                _lastCompositionText = string.Empty;
+                return;
+            }
+            // Space/Tab等の場合はそのまま下のswitch文に流す（トリガー判定へ）
+        }
 
         // キー処理
         switch (vkCode)
@@ -135,8 +184,8 @@ public class ExpansionService : IDisposable
                 }
                 else
                 {
-                    // 方向キーなど制御キーの場合はバッファクリア
-                    if (IsNavigationKey(vkCode))
+                    // VK_PROCESSKEY以外の制御キーの場合はバッファクリア
+                    if (vkCode != NativeMethods.VK_PROCESSKEY && IsNavigationKey(vkCode))
                     {
                         _triggerDetector.ClearBuffer();
                     }
@@ -187,8 +236,9 @@ public class ExpansionService : IDisposable
             var variableProcessor = new VariableProcessor();
             var (expandedText, cursorPosition) = variableProcessor.Expand(snippet.Body);
 
-            // クリップボード経由で貼り付け
-            System.Windows.Clipboard.SetText(expandedText);
+            // クリップボード経由で貼り付け（UIスレッドで実行）
+            System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+                System.Windows.Clipboard.SetText(expandedText));
 
             await Task.Delay(30);
 

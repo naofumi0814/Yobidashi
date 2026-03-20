@@ -53,6 +53,64 @@ public class ImeStateDetector
     }
 
     /// <summary>
+    /// IME未確定文字列（変換中のテキスト）を取得
+    /// </summary>
+    public string GetCompositionText()
+    {
+        return GetImeString(NativeMethods.GCS_COMPSTR);
+    }
+
+    /// <summary>
+    /// IME確定文字列（確定されたテキスト）を取得
+    /// </summary>
+    public string GetResultText()
+    {
+        return GetImeString(NativeMethods.GCS_RESULTSTR);
+    }
+
+    private string GetImeString(uint dwIndex)
+    {
+        var hwnd = NativeMethods.GetForegroundWindow();
+        if (hwnd == IntPtr.Zero) return string.Empty;
+
+        uint foregroundThreadId = NativeMethods.GetWindowThreadProcessId(hwnd, out _);
+        uint currentThreadId = NativeMethods.GetCurrentThreadId();
+
+        bool attached = false;
+        if (foregroundThreadId != currentThreadId)
+        {
+            attached = NativeMethods.AttachThreadInput(currentThreadId, foregroundThreadId, true);
+        }
+
+        try
+        {
+            var hIMC = NativeMethods.ImmGetContext(hwnd);
+            if (hIMC == IntPtr.Zero) return string.Empty;
+
+            try
+            {
+                int len = NativeMethods.ImmGetCompositionString(hIMC, dwIndex, null, 0);
+                if (len <= 0) return string.Empty;
+
+                byte[] buf = new byte[len];
+                NativeMethods.ImmGetCompositionString(hIMC, dwIndex, buf, (uint)len);
+                return Encoding.Unicode.GetString(buf);
+            }
+            finally
+            {
+                NativeMethods.ImmReleaseContext(hwnd, hIMC);
+            }
+        }
+        finally
+        {
+            if (attached)
+            {
+                NativeMethods.AttachThreadInput(currentThreadId, foregroundThreadId, false);
+            }
+        }
+    }
+
+    /// <summary>
     /// パスワードフィールドかどうかを検出
     /// </summary>
     public bool IsPasswordField()

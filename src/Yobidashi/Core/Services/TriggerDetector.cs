@@ -83,11 +83,14 @@ public class TriggerDetector
             if (normalizedBuffer.EndsWith(normalizedTrigger))
             {
                 // バッファの末尾がトリガーと一致
-                // トリガーの前が空白または行頭であることを確認（誤爆防止）
                 int triggerStart = normalizedBuffer.Length - normalizedTrigger.Length;
+
+                // 誤爆防止: トリガーの前が行頭、空白、句読点、
+                // または非ASCII文字（日本語は単語間にスペースがないため常に許可）
                 if (triggerStart == 0 ||
                     char.IsWhiteSpace(normalizedBuffer[triggerStart - 1]) ||
-                    IsPunctuation(normalizedBuffer[triggerStart - 1]))
+                    IsPunctuation(normalizedBuffer[triggerStart - 1]) ||
+                    normalizedBuffer[triggerStart - 1] > 0x7F)
                 {
                     TriggerMatched?.Invoke(snippet, trigger.Length);
                     ClearBuffer();

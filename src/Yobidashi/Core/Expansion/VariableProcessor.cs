@@ -71,9 +71,20 @@ public class VariableProcessor
     {
         try
         {
-            if (Clipboard.ContainsText())
+            // クリップボード操作はSTAスレッド（UIスレッド）で実行する必要がある
+            if (Application.Current?.Dispatcher.CheckAccess() == true)
             {
-                return Clipboard.GetText();
+                if (Clipboard.ContainsText())
+                    return Clipboard.GetText();
+            }
+            else
+            {
+                return Application.Current?.Dispatcher.Invoke(() =>
+                {
+                    if (Clipboard.ContainsText())
+                        return Clipboard.GetText();
+                    return string.Empty;
+                }) ?? string.Empty;
             }
         }
         catch { }
