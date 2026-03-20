@@ -88,8 +88,9 @@
                 </Grid>
             </Border>
 
-            <GridSplitter Grid.Column="1" Width="3" HorizontalAlignment="Center"
-                          VerticalAlignment="Stretch" Background="Transparent"/>
+            <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Center"
+                          VerticalAlignment="Stretch" Background="#E2E8F0"
+                          Cursor="SizeWE" ResizeBehavior="PreviousAndNext"/>
 
             <!-- 中央: 定型文一覧 -->
             <Grid Grid.Column="2" Margin="12">
@@ -161,8 +162,9 @@
                 </ListBox>
             </Grid>
 
-            <GridSplitter Grid.Column="3" Width="3" HorizontalAlignment="Center"
-                          VerticalAlignment="Stretch" Background="Transparent"/>
+            <GridSplitter Grid.Column="3" Width="6" HorizontalAlignment="Center"
+                          VerticalAlignment="Stretch" Background="#E2E8F0"
+                          Cursor="SizeWE" ResizeBehavior="PreviousAndNext"/>
 
             <!-- 右: 編集フォーム -->
             <ScrollViewer Grid.Column="4" VerticalScrollBarVisibility="Auto">

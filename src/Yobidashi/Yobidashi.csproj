@@ -10,7 +10,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <StartupObject>Yobidashi.Program</StartupObject>
-    <!-- <ApplicationIcon>Assets\app.ico</ApplicationIcon> -->
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <AssemblyName>Yobidashi</AssemblyName>
     <Version>1.0.0</Version>
     <Authors>Yobidashi Project</Authors>
