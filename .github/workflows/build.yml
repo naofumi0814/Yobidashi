@@ -1,0 +1,58 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore dependencies
+        run: dotnet restore src/Yobidashi/Yobidashi.csproj -r win-x64
+
+      - name: Build
+        run: dotnet build src/Yobidashi/Yobidashi.csproj -c Release -r win-x64 --no-restore
+
+      - name: Publish
+        run: dotnet publish src/Yobidashi/Yobidashi.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o publish
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Yobidashi-win-x64
+          path: publish/
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Yobidashi-win-x64
+          path: publish/
+
+      - name: Create zip
+        run: cd publish && zip -r ../Yobidashi-win-x64.zip .
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Yobidashi-win-x64.zip
+          generate_release_notes: true
