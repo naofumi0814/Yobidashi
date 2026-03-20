@@ -53,9 +53,11 @@ public class SnippetRepository
     {
         var conn = _db.GetConnection();
         using var cmd = conn.CreateCommand();
-        var like = $"%{query}%";
+        // LIKE特殊文字をエスケープ
+        var escaped = query.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
+        var like = $"%{escaped}%";
         cmd.CommandText = @"SELECT * FROM snippets
-            WHERE title LIKE @q OR trigger_text LIKE @q OR body LIKE @q OR tags LIKE @q OR memo LIKE @q
+            WHERE title LIKE @q ESCAPE '\' OR trigger_text LIKE @q ESCAPE '\' OR body LIKE @q ESCAPE '\' OR tags LIKE @q ESCAPE '\' OR memo LIKE @q ESCAPE '\'
             ORDER BY use_count DESC, updated_at DESC";
         cmd.Parameters.AddWithValue("@q", like);
         return ReadSnippets(cmd);
@@ -148,7 +150,7 @@ public class SnippetRepository
         cmd.CommandText = sortBy switch
         {
             "use_count" => "SELECT * FROM snippets ORDER BY use_count DESC",
-            "last_used" => "SELECT * FROM snippets ORDER BY last_used_at DESC NULLS LAST",
+            "last_used" => "SELECT * FROM snippets ORDER BY CASE WHEN last_used_at IS NULL THEN 1 ELSE 0 END, last_used_at DESC",
             "title" => "SELECT * FROM snippets ORDER BY title",
             "trigger" => "SELECT * FROM snippets ORDER BY trigger_text",
             _ => "SELECT * FROM snippets ORDER BY updated_at DESC"

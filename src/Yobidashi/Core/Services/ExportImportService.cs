@@ -84,7 +84,7 @@ public class ExportImportService
             }
 
             snippet.Id = 0; // 新規として挿入
-            _snippetRepository.Insert(snippet);
+            snippet.Id = _snippetRepository.Insert(snippet);
             imported++;
         }
 

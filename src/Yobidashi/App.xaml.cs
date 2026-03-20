@@ -123,17 +123,19 @@ public partial class App : Application
         _expansionService = _serviceProvider!.GetRequiredService<ExpansionService>();
         _expansionService.SnippetExpanded += (snippet) =>
         {
-            _mainWindow?.Dispatcher.Invoke(() =>
+            var window = _mainWindow;
+            window?.Dispatcher.Invoke(() =>
             {
-                _mainWindow.ViewModel.StatusText = $"展開完了: {snippet.Title}";
-                _mainWindow.ViewModel.LoadData();
+                window.ViewModel.StatusText = $"展開完了: {snippet.Title}";
+                window.ViewModel.LoadData();
             });
         };
         _expansionService.StatusMessage += (msg) =>
         {
-            _mainWindow?.Dispatcher.Invoke(() =>
+            var window = _mainWindow;
+            window?.Dispatcher.Invoke(() =>
             {
-                _mainWindow.ViewModel.StatusText = msg;
+                window.ViewModel.StatusText = msg;
             });
         };
         _expansionService.Start();
