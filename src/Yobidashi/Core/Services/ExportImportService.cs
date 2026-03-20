@@ -1,3 +1,4 @@
+using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Yobidashi.Data;
@@ -91,7 +92,7 @@ public class ExportImportService
     }
 
     /// <summary>データベースのバックアップを作成</summary>
-    public async Task BackupAsync(string? backupDir = null)
+    public Task BackupAsync(string? backupDir = null)
     {
         backupDir ??= Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -113,5 +114,7 @@ public class ExportImportService
         {
             try { File.Delete(old); } catch { }
         }
+
+        return Task.CompletedTask;
     }
 }

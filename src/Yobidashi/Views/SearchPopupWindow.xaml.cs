@@ -1,72 +1,79 @@
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Input;
-using Yobidashi.ViewModels;
+using System.Windows;
+using System.Windows.Input;
 using Yobidashi.Data.Models;
+using Yobidashi.ViewModels;
 
 namespace Yobidashi.Views;
 
-public sealed partial class SearchPopupWindow : Window
+public partial class SearchPopupWindow : Window
 {
     public SearchPopupViewModel ViewModel { get; }
 
-    /// <summary>定型文が選択されて挿入が要求された</summary>
     public event Action<Snippet>? SnippetInsertRequested;
 
     public SearchPopupWindow(SearchPopupViewModel viewModel)
     {
         ViewModel = viewModel;
-        this.InitializeComponent();
-
-        this.SystemBackdrop = new Microsoft.UI.Xaml.Media.DesktopAcrylicBackdrop();
-
-        // ウィンドウをコンパクトに
-        Title = "よびだし - 検索";
+        DataContext = viewModel;
+        InitializeComponent();
 
         ViewModel.SnippetSelected += OnSnippetSelected;
-        ViewModel.CloseRequested += () => this.Close();
+        ViewModel.CloseRequested += () => this.Hide();
     }
 
-    /// <summary>ポップアップ表示時の初期化</summary>
     public void ShowAndFocus()
     {
         ViewModel.Reset();
+        this.Show();
         this.Activate();
-        SearchInput.Focus(FocusState.Programmatic);
+        SearchInput.Focus();
+        SearchInput.SelectAll();
     }
 
     private void OnSnippetSelected(Snippet snippet)
     {
+        this.Hide();
         SnippetInsertRequested?.Invoke(snippet);
-        this.Close();
     }
 
-    private void SearchInput_KeyDown(object sender, KeyRoutedEventArgs e)
+    private void SearchInput_KeyDown(object sender, KeyEventArgs e)
     {
         switch (e.Key)
         {
-            case Windows.System.VirtualKey.Down:
+            case Key.Down:
                 ViewModel.SelectNextCommand.Execute(null);
                 e.Handled = true;
                 break;
-
-            case Windows.System.VirtualKey.Up:
+            case Key.Up:
                 ViewModel.SelectPreviousCommand.Execute(null);
                 e.Handled = true;
                 break;
-
-            case Windows.System.VirtualKey.Enter:
+            case Key.Enter:
                 ViewModel.ConfirmCommand.Execute(null);
                 e.Handled = true;
                 break;
-
-            case Windows.System.VirtualKey.Escape:
-                this.Close();
+            case Key.Escape:
+                this.Hide();
                 e.Handled = true;
                 break;
         }
     }
 
-    private void ResultsList_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
+    private void Window_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape)
+        {
+            this.Hide();
+            e.Handled = true;
+        }
+    }
+
+    private void Window_Deactivated(object? sender, EventArgs e)
+    {
+        this.Hide();
+    }
+
+    private void ResultsList_DoubleClick(object sender, MouseButtonEventArgs e)
     {
         ViewModel.ConfirmCommand.Execute(null);
     }

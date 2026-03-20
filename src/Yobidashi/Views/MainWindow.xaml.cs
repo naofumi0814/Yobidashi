@@ -1,34 +1,35 @@
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
+using System.ComponentModel;
+using System.Windows;
+using System.Windows.Controls;
 using Yobidashi.ViewModels;
 
 namespace Yobidashi.Views;
 
-public sealed partial class MainWindow : Window
+public partial class MainWindow : Window
 {
     public MainViewModel ViewModel { get; }
 
     public MainWindow(MainViewModel viewModel)
     {
         ViewModel = viewModel;
-        this.InitializeComponent();
+        DataContext = viewModel;
+        InitializeComponent();
+    }
 
-        // Mica背景を設定
-        this.SystemBackdrop = new Microsoft.UI.Xaml.Media.MicaBackdrop();
-
-        // タイトルバーカスタマイズ
-        ExtendsContentIntoTitleBar = false;
-        Title = "Yobidashi - よびだし";
+    private void Window_Closing(object sender, CancelEventArgs e)
+    {
+        // 閉じる代わりに非表示（トレイに最小化）
+        e.Cancel = true;
+        this.Hide();
     }
 
     private void PauseButton_Click(object sender, RoutedEventArgs e)
     {
-        // ExpansionServiceのIsPausedと連動（App.xaml.csで接続）
+        // ViewModel.IsPaused は TwoWay binding で自動更新
     }
 
     private void SettingsButton_Click(object sender, RoutedEventArgs e)
     {
-        // 設定ウィンドウを開く
         App.Current.ShowSettingsWindow();
     }
 
@@ -42,42 +43,27 @@ public sealed partial class MainWindow : Window
         ViewModel.SaveCommand.Execute(null);
     }
 
-    private async void DeleteButton_Click(object sender, RoutedEventArgs e)
+    private void DeleteButton_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new ContentDialog
-        {
-            Title = "削除の確認",
-            Content = "この定型文を削除しますか？この操作は元に戻せません。",
-            PrimaryButtonText = "削除",
-            CloseButtonText = "キャンセル",
-            DefaultButton = ContentDialogButton.Close,
-            XamlRoot = this.Content.XamlRoot
-        };
+        var result = MessageBox.Show(
+            "この定型文を削除しますか？\nこの操作は元に戻せません。",
+            "削除の確認",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
 
-        var result = await dialog.ShowAsync();
-        if (result == ContentDialogResult.Primary)
+        if (result == MessageBoxResult.Yes)
         {
             ViewModel.DeleteCommand.Execute(null);
         }
     }
 
-    private async void AddCategoryButton_Click(object sender, RoutedEventArgs e)
+    private void AddCategoryButton_Click(object sender, RoutedEventArgs e)
     {
-        var input = new TextBox { PlaceholderText = "カテゴリ名を入力" };
-        var dialog = new ContentDialog
+        var dialog = new InputDialog("カテゴリを追加", "カテゴリ名を入力してください:");
+        dialog.Owner = this;
+        if (dialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(dialog.InputText))
         {
-            Title = "カテゴリを追加",
-            Content = input,
-            PrimaryButtonText = "追加",
-            CloseButtonText = "キャンセル",
-            DefaultButton = ContentDialogButton.Primary,
-            XamlRoot = this.Content.XamlRoot
-        };
-
-        var result = await dialog.ShowAsync();
-        if (result == ContentDialogResult.Primary && !string.IsNullOrWhiteSpace(input.Text))
-        {
-            ViewModel.AddCategoryCommand.Execute(input.Text);
+            ViewModel.AddCategoryCommand.Execute(dialog.InputText);
         }
     }
 

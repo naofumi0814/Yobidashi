@@ -1,26 +1,25 @@
-using Microsoft.UI.Xaml;
+using System.Windows;
 using Yobidashi.Data.Models;
 using Yobidashi.ViewModels;
 
 namespace Yobidashi.Views;
 
-public sealed partial class SettingsWindow : Window
+public partial class SettingsWindow : Window
 {
     public SettingsViewModel ViewModel { get; }
 
     public SettingsWindow(SettingsViewModel viewModel)
     {
         ViewModel = viewModel;
-        this.InitializeComponent();
-
-        this.SystemBackdrop = new Microsoft.UI.Xaml.Media.MicaBackdrop();
-        Title = "設定 - Yobidashi";
+        DataContext = viewModel;
+        InitializeComponent();
     }
 
     private void SaveSettingsButton_Click(object sender, RoutedEventArgs e)
     {
         ViewModel.SaveSettingsCommand.Execute(null);
-        this.Close();
+        MessageBox.Show("設定を保存しました。", "Yobidashi", MessageBoxButton.OK, MessageBoxImage.Information);
+        Close();
     }
 
     private void AddExcludedApp_Click(object sender, RoutedEventArgs e)
@@ -39,6 +38,7 @@ public sealed partial class SettingsWindow : Window
     private void ExportButton_Click(object sender, RoutedEventArgs e)
     {
         ViewModel.ExportDataCommand.Execute(null);
+        MessageBox.Show("エクスポートが完了しました。", "Yobidashi", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
     private void ImportButton_Click(object sender, RoutedEventArgs e)
@@ -49,5 +49,6 @@ public sealed partial class SettingsWindow : Window
     private void BackupButton_Click(object sender, RoutedEventArgs e)
     {
         ViewModel.BackupCommand.Execute(null);
+        MessageBox.Show("バックアップが完了しました。", "Yobidashi", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 }

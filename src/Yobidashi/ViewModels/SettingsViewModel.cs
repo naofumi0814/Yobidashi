@@ -133,32 +133,31 @@ public partial class SettingsViewModel : ObservableObject
     [RelayCommand]
     private async Task ExportData()
     {
-        var picker = new Windows.Storage.Pickers.FileSavePicker();
-        picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary;
-        picker.FileTypeChoices.Add("JSON ファイル", new List<string> { ".json" });
-        picker.SuggestedFileName = $"yobidashi_export_{DateTime.Now:yyyyMMdd}";
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            Filter = "JSON ファイル (*.json)|*.json",
+            FileName = $"yobidashi_export_{DateTime.Now:yyyyMMdd}",
+            DefaultExt = ".json"
+        };
 
-        // WinUI 3 でピッカーを使うにはウィンドウハンドルが必要
-        // ここでは簡略化のため、デフォルトパスに保存
-        var path = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-            $"yobidashi_export_{DateTime.Now:yyyyMMdd_HHmmss}.json");
-
-        await _exportImportService.ExportAsync(path);
+        if (dialog.ShowDialog() == true)
+        {
+            await _exportImportService.ExportAsync(dialog.FileName);
+        }
     }
 
     [RelayCommand]
     private async Task ImportData()
     {
-        // 簡略化: 既知のパスからインポート
-        // 実際にはFileOpenPickerを使用
-        var path = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-            "yobidashi_export.json");
-
-        if (File.Exists(path))
+        var dialog = new Microsoft.Win32.OpenFileDialog
         {
-            await _exportImportService.ImportAsync(path);
+            Filter = "JSON ファイル (*.json)|*.json",
+            DefaultExt = ".json"
+        };
+
+        if (dialog.ShowDialog() == true)
+        {
+            await _exportImportService.ImportAsync(dialog.FileName);
         }
     }
 

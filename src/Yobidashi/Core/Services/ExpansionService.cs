@@ -188,9 +188,7 @@ public class ExpansionService : IDisposable
             var (expandedText, cursorPosition) = variableProcessor.Expand(snippet.Body);
 
             // クリップボード経由で貼り付け
-            var dataPackage = new Windows.ApplicationModel.DataTransfer.DataPackage();
-            dataPackage.SetText(expandedText);
-            Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(dataPackage);
+            System.Windows.Clipboard.SetText(expandedText);
 
             await Task.Delay(30);
 

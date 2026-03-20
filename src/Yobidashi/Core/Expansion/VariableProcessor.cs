@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using System.Windows;
 
 namespace Yobidashi.Core.Expansion;
 
@@ -11,7 +12,6 @@ public class VariableProcessor
     private readonly Dictionary<string, Func<string>> _builtInVariables;
     private static readonly Regex VariablePattern = new(@"\{\{(\w+(?::[^}]*)?)\}\}", RegexOptions.Compiled);
 
-    /// <summary>カーソル位置マーカー（展開後にカーソルをこの位置に移動）</summary>
     public const string CursorMarker = "\x00CURSOR\x00";
 
     public VariableProcessor()
@@ -29,10 +29,6 @@ public class VariableProcessor
         };
     }
 
-    /// <summary>
-    /// 本文中の変数を展開する
-    /// </summary>
-    /// <returns>展開後の文字列と、カーソル位置（見つかった場合）</returns>
     public (string text, int cursorPosition) Expand(string body)
     {
         if (string.IsNullOrEmpty(body))
@@ -42,7 +38,6 @@ public class VariableProcessor
         {
             var varName = match.Groups[1].Value;
 
-            // 組み込み変数
             if (_builtInVariables.TryGetValue(varName, out var resolver))
             {
                 return resolver();
@@ -51,15 +46,12 @@ public class VariableProcessor
             // 入力型変数（将来実装: {{input:名前}}）
             if (varName.StartsWith("input:", StringComparison.OrdinalIgnoreCase))
             {
-                // MVPでは未実装、プレースホルダをそのまま残す
                 return match.Value;
             }
 
-            // 未知の変数はそのまま残す
             return match.Value;
         });
 
-        // カーソル位置の検出
         int cursorPos = result.IndexOf(CursorMarker);
         if (cursorPos >= 0)
         {
@@ -69,7 +61,6 @@ public class VariableProcessor
         return (result, cursorPos);
     }
 
-    /// <summary>変数プレビュー用（編集画面で使用）</summary>
     public string Preview(string body)
     {
         var (text, _) = Expand(body);
@@ -80,17 +71,12 @@ public class VariableProcessor
     {
         try
         {
-            // WinUI 3環境でのクリップボードアクセス
-            var package = Windows.ApplicationModel.DataTransfer.Clipboard.GetContent();
-            if (package.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.Text))
+            if (Clipboard.ContainsText())
             {
-                return package.GetTextAsync().AsTask().GetAwaiter().GetResult();
+                return Clipboard.GetText();
             }
         }
-        catch
-        {
-            // クリップボードアクセス失敗時は空文字
-        }
+        catch { }
         return string.Empty;
     }
 

@@ -1,5 +1,5 @@
+using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.UI.Xaml;
 using Yobidashi.Core.Expansion;
 using Yobidashi.Core.Hooks;
 using Yobidashi.Core.Services;
@@ -10,9 +10,6 @@ using Yobidashi.Views;
 
 namespace Yobidashi;
 
-/// <summary>
-/// Yobidashi アプリケーション エントリポイント
-/// </summary>
 public partial class App : Application
 {
     private ServiceProvider? _serviceProvider;
@@ -21,59 +18,43 @@ public partial class App : Application
     private SearchPopupWindow? _searchPopupWindow;
     private ExpansionService? _expansionService;
     private HotkeyManager? _hotkeyManager;
-    private H.NotifyIcon.TaskbarIcon? _trayIcon;
+    private System.Windows.Forms.NotifyIcon? _trayIcon;
 
     public new static App Current => (App)Application.Current;
-
     public IServiceProvider Services => _serviceProvider!;
 
-    public App()
+    private void Application_Startup(object sender, StartupEventArgs e)
     {
-        this.InitializeComponent();
-    }
-
-    protected override void OnLaunched(LaunchActivatedEventArgs args)
-    {
-        // DIコンテナの構築
         var services = new ServiceCollection();
         ConfigureServices(services);
         _serviceProvider = services.BuildServiceProvider();
 
-        // データベース初期化
+        // DB初期化
         var db = _serviceProvider.GetRequiredService<DatabaseManager>();
         db.Initialize();
 
-        // メインウィンドウ作成
-        _mainWindow = _serviceProvider.GetRequiredService<MainWindow>();
+        // メインウィンドウ
+        _mainWindow = new MainWindow(_serviceProvider.GetRequiredService<MainViewModel>());
 
-        // 起動パラメータで最小化起動するか判定
-        bool startMinimized = Environment.GetCommandLineArgs().Contains("--minimized");
-
+        bool startMinimized = e.Args.Contains("--minimized");
         if (!startMinimized)
         {
-            _mainWindow.Activate();
+            _mainWindow.Show();
         }
 
-        // システムトレイ設定
         SetupTrayIcon();
-
-        // 展開サービス開始
         StartExpansionService();
-
-        // グローバルホットキー設定
         SetupHotkeys();
     }
 
     private void ConfigureServices(IServiceCollection services)
     {
-        // データ
         services.AddSingleton<DatabaseManager>();
         services.AddSingleton<SnippetRepository>();
         services.AddSingleton<CategoryRepository>();
         services.AddSingleton<SettingsRepository>();
         services.AddSingleton<ExcludedAppRepository>();
 
-        // コアサービス
         services.AddSingleton<GlobalKeyboardHook>();
         services.AddSingleton<ImeStateDetector>();
         services.AddSingleton<ITextNormalizer, TextNormalizer>();
@@ -85,62 +66,56 @@ public partial class App : Application
         services.AddSingleton<AutoStartManager>();
         services.AddSingleton<ExportImportService>();
 
-        // ViewModels
         services.AddTransient<MainViewModel>();
         services.AddTransient<SearchPopupViewModel>();
         services.AddTransient<SettingsViewModel>();
-
-        // Views
-        services.AddTransient<MainWindow>();
     }
 
     private void SetupTrayIcon()
     {
-        // H.NotifyIcon を使用したシステムトレイアイコン
-        // 注: 実際の実装では XAML リソースまたはアイコンファイルを使用
-        _trayIcon = new H.NotifyIcon.TaskbarIcon();
-        _trayIcon.ToolTipText = "Yobidashi - よびだし";
+        _trayIcon = new System.Windows.Forms.NotifyIcon
+        {
+            Text = "Yobidashi - よびだし",
+            Visible = true
+        };
 
-        // コンテキストメニュー
-        var contextMenu = new Microsoft.UI.Xaml.Controls.MenuFlyout();
+        // 埋め込みアイコン（なければデフォルト）
+        try
+        {
+            var iconPath = System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "app.ico");
+            if (System.IO.File.Exists(iconPath))
+                _trayIcon.Icon = new System.Drawing.Icon(iconPath);
+            else
+                _trayIcon.Icon = System.Drawing.SystemIcons.Application;
+        }
+        catch
+        {
+            _trayIcon.Icon = System.Drawing.SystemIcons.Application;
+        }
 
-        var showItem = new Microsoft.UI.Xaml.Controls.MenuFlyoutItem { Text = "管理画面を開く" };
-        showItem.Click += (s, e) => ShowMainWindow();
-        contextMenu.Items.Add(showItem);
+        var menu = new System.Windows.Forms.ContextMenuStrip();
+        menu.Items.Add("管理画面を開く", null, (s, e) => ShowMainWindow());
+        menu.Items.Add("検索 (Ctrl+Space)", null, (s, e) => ShowSearchPopup());
+        menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
 
-        var searchItem = new Microsoft.UI.Xaml.Controls.MenuFlyoutItem { Text = "検索 (Ctrl+Space)" };
-        searchItem.Click += (s, e) => ShowSearchPopup();
-        contextMenu.Items.Add(searchItem);
-
-        contextMenu.Items.Add(new Microsoft.UI.Xaml.Controls.MenuFlyoutSeparator());
-
-        var pauseItem = new Microsoft.UI.Xaml.Controls.MenuFlyoutItem { Text = "一時停止" };
+        var pauseItem = new System.Windows.Forms.ToolStripMenuItem("一時停止");
         pauseItem.Click += (s, e) =>
         {
             if (_expansionService != null)
             {
                 _expansionService.IsPaused = !_expansionService.IsPaused;
                 pauseItem.Text = _expansionService.IsPaused ? "再開" : "一時停止";
-                _trayIcon.ToolTipText = _expansionService.IsPaused
+                _trayIcon.Text = _expansionService.IsPaused
                     ? "Yobidashi - 一時停止中"
                     : "Yobidashi - よびだし";
             }
         };
-        contextMenu.Items.Add(pauseItem);
+        menu.Items.Add(pauseItem);
+        menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
+        menu.Items.Add("終了", null, (s, e) => ExitApplication());
 
-        contextMenu.Items.Add(new Microsoft.UI.Xaml.Controls.MenuFlyoutSeparator());
-
-        var exitItem = new Microsoft.UI.Xaml.Controls.MenuFlyoutItem { Text = "終了" };
-        exitItem.Click += (s, e) => ExitApplication();
-        contextMenu.Items.Add(exitItem);
-
-        _trayIcon.ContextMenuMode = H.NotifyIcon.ContextMenuMode.SecondWindow;
-        _trayIcon.ContextFlyout = contextMenu;
-
-        // ダブルクリックでメインウィンドウ表示
-        _trayIcon.TrayIconLeftMouseDoubleClick += (s, e) => ShowMainWindow();
-
-        _trayIcon.ForceCreate();
+        _trayIcon.ContextMenuStrip = menu;
+        _trayIcon.DoubleClick += (s, e) => ShowMainWindow();
     }
 
     private void StartExpansionService()
@@ -148,8 +123,7 @@ public partial class App : Application
         _expansionService = _serviceProvider!.GetRequiredService<ExpansionService>();
         _expansionService.SnippetExpanded += (snippet) =>
         {
-            // UIスレッドで通知更新
-            _mainWindow?.DispatcherQueue.TryEnqueue(() =>
+            _mainWindow?.Dispatcher.Invoke(() =>
             {
                 _mainWindow.ViewModel.StatusText = $"展開完了: {snippet.Title}";
                 _mainWindow.ViewModel.LoadData();
@@ -157,7 +131,7 @@ public partial class App : Application
         };
         _expansionService.StatusMessage += (msg) =>
         {
-            _mainWindow?.DispatcherQueue.TryEnqueue(() =>
+            _mainWindow?.Dispatcher.Invoke(() =>
             {
                 _mainWindow.ViewModel.StatusText = msg;
             });
@@ -169,17 +143,28 @@ public partial class App : Application
     {
         _hotkeyManager = _serviceProvider!.GetRequiredService<HotkeyManager>();
 
-        // メインウィンドウのハンドルでホットキー登録
         if (_mainWindow != null)
         {
-            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(_mainWindow);
-            _hotkeyManager.Initialize(hwnd);
+            var helper = new System.Windows.Interop.WindowInteropHelper(_mainWindow);
+            helper.EnsureHandle();
+            _hotkeyManager.Initialize(helper.Handle);
 
-            // Ctrl+Space で検索ポップアップ
             _hotkeyManager.Register(
                 Interop.NativeMethods.MOD_CONTROL,
                 Interop.NativeMethods.VK_SPACE,
                 ShowSearchPopup);
+
+            // WM_HOTKEY メッセージを処理
+            var source = System.Windows.Interop.HwndSource.FromHwnd(helper.Handle);
+            source?.AddHook((IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled) =>
+            {
+                if (msg == 0x0312) // WM_HOTKEY
+                {
+                    _hotkeyManager.HandleHotkeyMessage(wParam.ToInt32());
+                    handled = true;
+                }
+                return IntPtr.Zero;
+            });
         }
     }
 
@@ -187,8 +172,10 @@ public partial class App : Application
     {
         if (_mainWindow == null)
         {
-            _mainWindow = _serviceProvider!.GetRequiredService<MainWindow>();
+            _mainWindow = new MainWindow(_serviceProvider!.GetRequiredService<MainViewModel>());
         }
+        _mainWindow.Show();
+        _mainWindow.WindowState = WindowState.Normal;
         _mainWindow.Activate();
     }
 
@@ -197,13 +184,11 @@ public partial class App : Application
         if (_settingsWindow == null)
         {
             var vm = _serviceProvider!.GetRequiredService<SettingsViewModel>();
-            vm.SettingsChanged += () =>
-            {
-                _expansionService?.RefreshExcludedApps();
-            };
+            vm.SettingsChanged += () => _expansionService?.RefreshExcludedApps();
             _settingsWindow = new SettingsWindow(vm);
             _settingsWindow.Closed += (s, e) => _settingsWindow = null;
         }
+        _settingsWindow.Show();
         _settingsWindow.Activate();
     }
 
@@ -216,9 +201,7 @@ public partial class App : Application
             _searchPopupWindow.SnippetInsertRequested += async (snippet) =>
             {
                 if (_expansionService != null)
-                {
                     await _expansionService.ExpandDirectAsync(snippet);
-                }
             };
             _searchPopupWindow.Closed += (s, e) => _searchPopupWindow = null;
         }
@@ -229,8 +212,12 @@ public partial class App : Application
     {
         _expansionService?.Dispose();
         _hotkeyManager?.Dispose();
-        _trayIcon?.Dispose();
+        if (_trayIcon != null)
+        {
+            _trayIcon.Visible = false;
+            _trayIcon.Dispose();
+        }
         (_serviceProvider as IDisposable)?.Dispose();
-        Environment.Exit(0);
+        Shutdown();
     }
 }
