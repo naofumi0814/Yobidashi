@@ -145,10 +145,10 @@ public partial class App : Application
             });
         };
 
-        // Ctrl二回連打でポップアップ表示
+        // Ctrl二回連打でポップアップ表示（高速応答のためBeginInvoke使用）
         _expansionService.DoubleCtrlPressed += () =>
         {
-            Dispatcher.Invoke(ShowSearchPopup);
+            Dispatcher.BeginInvoke(ShowSearchPopup, System.Windows.Threading.DispatcherPriority.Send);
         };
 
         _expansionService.Start();

@@ -43,16 +43,40 @@ public partial class SearchPopupWindow : Window
         TextSelected?.Invoke(text);
     }
 
+    private void SwitchTab()
+    {
+        if (ViewModel.IsClipboardTab)
+        {
+            ViewModel.IsClipboardTab = false;
+            ViewModel.IsSnippetTab = true;
+        }
+        else
+        {
+            ViewModel.IsClipboardTab = true;
+            ViewModel.IsSnippetTab = false;
+        }
+    }
+
+    private void ScrollSelectedIntoView()
+    {
+        if (ViewModel.SelectedIndex >= 0 && ViewModel.SelectedIndex < ResultsList.Items.Count)
+        {
+            ResultsList.ScrollIntoView(ResultsList.Items[ViewModel.SelectedIndex]);
+        }
+    }
+
     private void SearchInput_KeyDown(object sender, KeyEventArgs e)
     {
         switch (e.Key)
         {
             case Key.Down:
                 ViewModel.SelectNextCommand.Execute(null);
+                ScrollSelectedIntoView();
                 e.Handled = true;
                 break;
             case Key.Up:
                 ViewModel.SelectPreviousCommand.Execute(null);
+                ScrollSelectedIntoView();
                 e.Handled = true;
                 break;
             case Key.Enter:
@@ -63,18 +87,10 @@ public partial class SearchPopupWindow : Window
                 this.Hide();
                 e.Handled = true;
                 break;
+            case Key.Left:
+            case Key.Right:
             case Key.Tab:
-                // Tab でタブ切り替え
-                if (ViewModel.IsClipboardTab)
-                {
-                    ViewModel.IsClipboardTab = false;
-                    ViewModel.IsSnippetTab = true;
-                }
-                else
-                {
-                    ViewModel.IsClipboardTab = true;
-                    ViewModel.IsSnippetTab = false;
-                }
+                SwitchTab();
                 e.Handled = true;
                 break;
         }
@@ -82,10 +98,31 @@ public partial class SearchPopupWindow : Window
 
     private void Window_KeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Escape)
+        switch (e.Key)
         {
-            this.Hide();
-            e.Handled = true;
+            case Key.Escape:
+                this.Hide();
+                e.Handled = true;
+                break;
+            case Key.Down:
+                ViewModel.SelectNextCommand.Execute(null);
+                ScrollSelectedIntoView();
+                e.Handled = true;
+                break;
+            case Key.Up:
+                ViewModel.SelectPreviousCommand.Execute(null);
+                ScrollSelectedIntoView();
+                e.Handled = true;
+                break;
+            case Key.Enter:
+                ViewModel.ConfirmCommand.Execute(null);
+                e.Handled = true;
+                break;
+            case Key.Left:
+            case Key.Right:
+                SwitchTab();
+                e.Handled = true;
+                break;
         }
     }
 

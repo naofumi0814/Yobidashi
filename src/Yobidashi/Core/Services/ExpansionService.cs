@@ -35,7 +35,7 @@ public class ExpansionService : IDisposable
     // Ctrl二回連打検出
     private DateTime _lastCtrlUpTime = DateTime.MinValue;
     private bool _ctrlWasDownAlone; // Ctrl単体で押されたか（他のキーとの組み合わせでない）
-    private const int DoubleCtrlIntervalMs = 400;
+    private const int DoubleCtrlIntervalMs = 300;
 
     /// <summary>展開成功時イベント</summary>
     public event Action<Snippet>? SnippetExpanded;
