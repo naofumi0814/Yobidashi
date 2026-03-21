@@ -32,6 +32,11 @@ public class ExpansionService : IDisposable
     private const uint SC_SPACE = 0x39;
     private const uint SC_TAB = 0x0F;
 
+    // Ctrl二回連打検出
+    private DateTime _lastCtrlUpTime = DateTime.MinValue;
+    private bool _ctrlWasDownAlone; // Ctrl単体で押されたか（他のキーとの組み合わせでない）
+    private const int DoubleCtrlIntervalMs = 400;
+
     /// <summary>展開成功時イベント</summary>
     public event Action<Snippet>? SnippetExpanded;
 
@@ -40,6 +45,9 @@ public class ExpansionService : IDisposable
 
     /// <summary>ステータスメッセージイベント</summary>
     public event Action<string>? StatusMessage;
+
+    /// <summary>Ctrl二回連打イベント（ポップアップ表示用）</summary>
+    public event Action? DoubleCtrlPressed;
 
     public bool IsPaused
     {
@@ -83,6 +91,7 @@ public class ExpansionService : IDisposable
 
         // キーボードフックのイベント登録
         _keyboardHook.KeyDown += OnKeyDown;
+        _keyboardHook.KeyUp += OnKeyUp;
         _keyboardHook.Install();
 
         _isPaused = _settingsRepository.GetBool("is_paused");
@@ -92,6 +101,7 @@ public class ExpansionService : IDisposable
     public void Stop()
     {
         _keyboardHook.KeyDown -= OnKeyDown;
+        _keyboardHook.KeyUp -= OnKeyUp;
         _keyboardHook.Uninstall();
     }
 
@@ -100,8 +110,41 @@ public class ExpansionService : IDisposable
         _excludedProcesses = _excludedAppRepository.GetProcessNames();
     }
 
+    /// <summary>Ctrl二回連打検出（KeyUp時）</summary>
+    private void OnKeyUp(uint vkCode)
+    {
+        if (vkCode == NativeMethods.VK_LCONTROL || vkCode == NativeMethods.VK_RCONTROL ||
+            vkCode == NativeMethods.VK_CONTROL)
+        {
+            if (!_ctrlWasDownAlone) return; // 他キーとの組み合わせだった
+
+            var now = DateTime.UtcNow;
+            var elapsed = (now - _lastCtrlUpTime).TotalMilliseconds;
+            _lastCtrlUpTime = now;
+
+            if (elapsed < DoubleCtrlIntervalMs)
+            {
+                _lastCtrlUpTime = DateTime.MinValue; // 3回目でまた発火しないようリセット
+                DoubleCtrlPressed?.Invoke();
+            }
+        }
+    }
+
     private void OnKeyDown(uint vkCode, uint scanCode, bool isInjected)
     {
+        // Ctrl単体押下のトラッキング
+        if (vkCode == NativeMethods.VK_LCONTROL || vkCode == NativeMethods.VK_RCONTROL ||
+            vkCode == NativeMethods.VK_CONTROL)
+        {
+            _ctrlWasDownAlone = true;
+            return; // Ctrl自体はトリガー処理しない
+        }
+        else if (_ctrlWasDownAlone)
+        {
+            // Ctrl + 他のキー → Ctrl単体ではない
+            _ctrlWasDownAlone = false;
+        }
+
         // 自前の入力は無視
         if (isInjected || _isExpanding) return;
 

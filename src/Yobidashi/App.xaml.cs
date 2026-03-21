@@ -1,10 +1,12 @@
 using System.Windows;
+using System.Windows.Interop;
 using Microsoft.Extensions.DependencyInjection;
 using Yobidashi.Core.Expansion;
 using Yobidashi.Core.Hooks;
 using Yobidashi.Core.Services;
 using Yobidashi.Data;
 using Yobidashi.Data.Repositories;
+using Yobidashi.Interop;
 using Yobidashi.ViewModels;
 using Yobidashi.Views;
 
@@ -17,6 +19,7 @@ public partial class App : Application
     private SettingsWindow? _settingsWindow;
     private SearchPopupWindow? _searchPopupWindow;
     private ExpansionService? _expansionService;
+    private ClipboardHistoryService? _clipboardHistory;
     private HotkeyManager? _hotkeyManager;
     private System.Windows.Forms.NotifyIcon? _trayIcon;
 
@@ -44,6 +47,7 @@ public partial class App : Application
 
         SetupTrayIcon();
         StartExpansionService();
+        SetupClipboardMonitoring();
         SetupHotkeys();
     }
 
@@ -62,6 +66,7 @@ public partial class App : Application
         services.AddSingleton<VariableProcessor>();
         services.AddSingleton<TextExpander>();
         services.AddSingleton<FocusedTextReader>();
+        services.AddSingleton<ClipboardHistoryService>();
         services.AddSingleton<ExpansionService>();
         services.AddSingleton<HotkeyManager>();
         services.AddSingleton<AutoStartManager>();
@@ -96,7 +101,7 @@ public partial class App : Application
 
         var menu = new System.Windows.Forms.ContextMenuStrip();
         menu.Items.Add("管理画面を開く", null, (s, e) => ShowMainWindow());
-        menu.Items.Add("検索 (Ctrl+Space)", null, (s, e) => ShowSearchPopup());
+        menu.Items.Add("よびだし (Ctrl×2)", null, (s, e) => ShowSearchPopup());
         menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
 
         var pauseItem = new System.Windows.Forms.ToolStripMenuItem("一時停止");
@@ -139,7 +144,42 @@ public partial class App : Application
                 window.ViewModel.StatusText = msg;
             });
         };
+
+        // Ctrl二回連打でポップアップ表示
+        _expansionService.DoubleCtrlPressed += () =>
+        {
+            Dispatcher.Invoke(ShowSearchPopup);
+        };
+
         _expansionService.Start();
+    }
+
+    /// <summary>
+    /// クリップボード監視のセットアップ
+    /// メインウィンドウのHWNDにAddClipboardFormatListenerを登録し、
+    /// WM_CLIPBOARDUPDATEメッセージを受け取る
+    /// </summary>
+    private void SetupClipboardMonitoring()
+    {
+        _clipboardHistory = _serviceProvider!.GetRequiredService<ClipboardHistoryService>();
+
+        if (_mainWindow == null) return;
+
+        var helper = new WindowInteropHelper(_mainWindow);
+        helper.EnsureHandle();
+        var hwnd = helper.Handle;
+
+        NativeMethods.AddClipboardFormatListener(hwnd);
+
+        var source = HwndSource.FromHwnd(hwnd);
+        source?.AddHook((IntPtr h, int msg, IntPtr wParam, IntPtr lParam, ref bool handled) =>
+        {
+            if (msg == NativeMethods.WM_CLIPBOARDUPDATE)
+            {
+                _clipboardHistory.OnClipboardChanged();
+            }
+            return IntPtr.Zero;
+        });
     }
 
     private void SetupHotkeys()
@@ -148,17 +188,12 @@ public partial class App : Application
 
         if (_mainWindow != null)
         {
-            var helper = new System.Windows.Interop.WindowInteropHelper(_mainWindow);
+            var helper = new WindowInteropHelper(_mainWindow);
             helper.EnsureHandle();
             _hotkeyManager.Initialize(helper.Handle);
 
-            _hotkeyManager.Register(
-                Interop.NativeMethods.MOD_CONTROL,
-                Interop.NativeMethods.VK_SPACE,
-                ShowSearchPopup);
-
-            // WM_HOTKEY メッセージを処理
-            var source = System.Windows.Interop.HwndSource.FromHwnd(helper.Handle);
+            // WM_HOTKEY メッセージを処理（将来のホットキー用に残す）
+            var source = HwndSource.FromHwnd(helper.Handle);
             source?.AddHook((IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled) =>
             {
                 if (msg == 0x0312) // WM_HOTKEY
@@ -201,11 +236,6 @@ public partial class App : Application
         {
             var vm = _serviceProvider!.GetRequiredService<SearchPopupViewModel>();
             _searchPopupWindow = new SearchPopupWindow(vm);
-            _searchPopupWindow.SnippetInsertRequested += async (snippet) =>
-            {
-                if (_expansionService != null)
-                    await _expansionService.ExpandDirectAsync(snippet);
-            };
             _searchPopupWindow.Closed += (s, e) => _searchPopupWindow = null;
         }
         _searchPopupWindow.ShowAndFocus();
@@ -213,6 +243,16 @@ public partial class App : Application
 
     private void ExitApplication()
     {
+        // クリップボード監視解除
+        if (_mainWindow != null)
+        {
+            var helper = new WindowInteropHelper(_mainWindow);
+            if (helper.Handle != IntPtr.Zero)
+            {
+                NativeMethods.RemoveClipboardFormatListener(helper.Handle);
+            }
+        }
+
         _expansionService?.Dispose();
         _hotkeyManager?.Dispose();
         if (_trayIcon != null)

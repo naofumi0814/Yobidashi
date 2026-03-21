@@ -184,4 +184,19 @@ internal static class NativeMethods
 
     [DllImport("user32.dll", EntryPoint = "SendMessageW")]
     public static extern IntPtr SendMessageGetSel(IntPtr hWnd, uint Msg, out int wParam, out int lParam);
+
+    // クリップボード監視
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool AddClipboardFormatListener(IntPtr hwnd);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool RemoveClipboardFormatListener(IntPtr hwnd);
+
+    public const int WM_CLIPBOARDUPDATE = 0x031D;
+
+    // Ctrl キー
+    public const ushort VK_LCONTROL = 0xA2;
+    public const ushort VK_RCONTROL = 0xA3;
 }

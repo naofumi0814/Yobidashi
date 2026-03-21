@@ -1,7 +1,7 @@
 <Window x:Class="Yobidashi.Views.SearchPopupWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="よびだし - 検索" Width="500" Height="420"
+        Title="よびだし" Width="680" Height="640"
         WindowStartupLocation="CenterScreen"
         WindowStyle="None" AllowsTransparency="True"
         Background="Transparent" Topmost="True"
@@ -12,11 +12,12 @@
     <Border Background="White" CornerRadius="12" Margin="8"
             BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
         <Border.Effect>
-            <DropShadowEffect BlurRadius="20" ShadowDepth="4" Opacity="0.15" Color="#000"/>
+            <DropShadowEffect BlurRadius="20" ShadowDepth="4" Opacity="0.12" Color="#000"/>
         </Border.Effect>
 
-        <Grid Margin="16">
+        <Grid Margin="12,10,12,8">
             <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
@@ -25,55 +26,74 @@
             <!-- 検索ボックス -->
             <TextBox x:Name="SearchInput" Grid.Row="0"
                      Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
-                     FontSize="16" Padding="12,10"
-                     BorderBrush="{StaticResource PrimaryBrush}" BorderThickness="2"
-                     Margin="0,0,0,12"
+                     FontSize="13" Padding="8,6"
+                     BorderBrush="{StaticResource PrimaryBrush}" BorderThickness="1.5"
+                     Margin="0,0,0,6"
                      KeyDown="SearchInput_KeyDown">
                 <TextBox.Resources>
                     <Style TargetType="Border">
-                        <Setter Property="CornerRadius" Value="8"/>
+                        <Setter Property="CornerRadius" Value="6"/>
                     </Style>
                 </TextBox.Resources>
             </TextBox>
 
+            <!-- タブ切り替え -->
+            <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,4">
+                <RadioButton x:Name="TabClipboard" Content="クリップボード履歴"
+                             IsChecked="{Binding IsClipboardTab}"
+                             Style="{StaticResource {x:Type RadioButton}}"
+                             FontSize="11" Margin="0,0,12,0" Padding="8,4"
+                             Checked="Tab_Changed"/>
+                <RadioButton x:Name="TabSnippets" Content="定型文"
+                             IsChecked="{Binding IsSnippetTab}"
+                             Style="{StaticResource {x:Type RadioButton}}"
+                             FontSize="11" Padding="8,4"
+                             Checked="Tab_Changed"/>
+                <TextBlock VerticalAlignment="Center" Margin="16,0,0,0"
+                           FontSize="10" Foreground="{StaticResource TextSecondaryBrush}"
+                           Text="{Binding ItemCountText}"/>
+            </StackPanel>
+
             <!-- 結果一覧 -->
-            <ListBox x:Name="ResultsList" Grid.Row="1"
-                     ItemsSource="{Binding Results}"
+            <ListBox x:Name="ResultsList" Grid.Row="2"
+                     ItemsSource="{Binding DisplayItems}"
                      SelectedIndex="{Binding SelectedIndex}"
                      BorderThickness="0"
                      HorizontalContentAlignment="Stretch"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     VirtualizingPanel.IsVirtualizing="True"
                      MouseDoubleClick="ResultsList_DoubleClick">
                 <ListBox.ItemTemplate>
                     <DataTemplate>
-                        <Border Padding="10,10" BorderBrush="{StaticResource BorderBrush}"
-                                BorderThickness="0,0,0,1">
+                        <Border Padding="6,3" BorderBrush="#EEE" BorderThickness="0,0,0,1">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                </Grid.RowDefinitions>
 
-                                <Border Grid.Column="0" Grid.RowSpan="2"
-                                        Background="{StaticResource AccentBadgeBrush}"
-                                        CornerRadius="6" Padding="10,6" Margin="0,0,12,0"
-                                        VerticalAlignment="Center">
-                                    <TextBlock Text="{Binding TriggerText}" FontSize="13"
+                                <!-- バッジ（種別表示） -->
+                                <Border Grid.Column="0"
+                                        Background="{Binding BadgeColor}"
+                                        CornerRadius="3" Padding="5,1" Margin="0,0,8,0"
+                                        VerticalAlignment="Center"
+                                        Visibility="{Binding BadgeVisibility}">
+                                    <TextBlock Text="{Binding BadgeText}" FontSize="9"
                                                FontWeight="SemiBold" Foreground="White"/>
                                 </Border>
 
-                                <TextBlock Grid.Column="1" Grid.Row="0"
-                                           Text="{Binding Title}" FontWeight="SemiBold"
-                                           FontSize="13" TextTrimming="CharacterEllipsis"/>
+                                <!-- テキスト内容 -->
+                                <TextBlock Grid.Column="1"
+                                           Text="{Binding DisplayText}" FontSize="11"
+                                           TextTrimming="CharacterEllipsis"
+                                           VerticalAlignment="Center"/>
 
-                                <TextBlock Grid.Column="1" Grid.Row="1"
-                                           Text="{Binding Body}" FontSize="11"
+                                <!-- 時刻 -->
+                                <TextBlock Grid.Column="2"
+                                           Text="{Binding TimeText}" FontSize="9"
                                            Foreground="{StaticResource TextSecondaryBrush}"
-                                           TextTrimming="CharacterEllipsis" MaxHeight="16"
-                                           Margin="0,3,0,0"/>
+                                           VerticalAlignment="Center" Margin="8,0,0,0"/>
                             </Grid>
                         </Border>
                     </DataTemplate>
@@ -81,11 +101,11 @@
             </ListBox>
 
             <!-- ヒント -->
-            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center"
-                        Margin="0,10,0,0">
-                <TextBlock Text="↑↓ 選択" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,16,0"/>
-                <TextBlock Text="Enter 挿入" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,16,0"/>
-                <TextBlock Text="Esc 閉じる" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"/>
+            <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Center"
+                        Margin="0,4,0,0">
+                <TextBlock Text="↑↓ 選択" FontSize="9" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,12,0"/>
+                <TextBlock Text="Enter 選択してクリップボードにコピー" FontSize="9" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,12,0"/>
+                <TextBlock Text="Esc 閉じる" FontSize="9" Foreground="{StaticResource TextSecondaryBrush}"/>
             </StackPanel>
         </Grid>
     </Border>

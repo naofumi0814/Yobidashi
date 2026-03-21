@@ -1,6 +1,5 @@
 using System.Windows;
 using System.Windows.Input;
-using Yobidashi.Data.Models;
 using Yobidashi.ViewModels;
 
 namespace Yobidashi.Views;
@@ -9,7 +8,8 @@ public partial class SearchPopupWindow : Window
 {
     public SearchPopupViewModel ViewModel { get; }
 
-    public event Action<Snippet>? SnippetInsertRequested;
+    /// <summary>テキストが選択された（クリップボードにセット済み）</summary>
+    public event Action<string>? TextSelected;
 
     public SearchPopupWindow(SearchPopupViewModel viewModel)
     {
@@ -17,7 +17,7 @@ public partial class SearchPopupWindow : Window
         DataContext = viewModel;
         InitializeComponent();
 
-        ViewModel.SnippetSelected += OnSnippetSelected;
+        ViewModel.ItemSelected += OnItemSelected;
         ViewModel.CloseRequested += () => this.Hide();
     }
 
@@ -30,10 +30,17 @@ public partial class SearchPopupWindow : Window
         SearchInput.SelectAll();
     }
 
-    private void OnSnippetSelected(Snippet snippet)
+    private void OnItemSelected(string text)
     {
+        // クリップボードにセットして閉じる
+        try
+        {
+            Clipboard.SetText(text);
+        }
+        catch { }
+
         this.Hide();
-        SnippetInsertRequested?.Invoke(snippet);
+        TextSelected?.Invoke(text);
     }
 
     private void SearchInput_KeyDown(object sender, KeyEventArgs e)
@@ -56,6 +63,20 @@ public partial class SearchPopupWindow : Window
                 this.Hide();
                 e.Handled = true;
                 break;
+            case Key.Tab:
+                // Tab でタブ切り替え
+                if (ViewModel.IsClipboardTab)
+                {
+                    ViewModel.IsClipboardTab = false;
+                    ViewModel.IsSnippetTab = true;
+                }
+                else
+                {
+                    ViewModel.IsClipboardTab = true;
+                    ViewModel.IsSnippetTab = false;
+                }
+                e.Handled = true;
+                break;
         }
     }
 
@@ -76,5 +97,10 @@ public partial class SearchPopupWindow : Window
     private void ResultsList_DoubleClick(object sender, MouseButtonEventArgs e)
     {
         ViewModel.ConfirmCommand.Execute(null);
+    }
+
+    private void Tab_Changed(object sender, RoutedEventArgs e)
+    {
+        SearchInput?.Focus();
     }
 }
