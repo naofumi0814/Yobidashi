@@ -26,8 +26,7 @@ public partial class SearchPopupWindow : Window
         ViewModel.Reset();
         this.Show();
         this.Activate();
-        SearchInput.Focus();
-        SearchInput.SelectAll();
+        this.Focus();
     }
 
     private void OnItemSelected(string text)
@@ -65,7 +64,11 @@ public partial class SearchPopupWindow : Window
         }
     }
 
-    private void SearchInput_KeyDown(object sender, KeyEventArgs e)
+    /// <summary>
+    /// PreviewKeyDownでウィンドウレベルでキー入力を最優先処理
+    /// 子コントロールにイベントが渡る前にハンドルする
+    /// </summary>
+    private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         switch (e.Key)
         {
@@ -79,47 +82,20 @@ public partial class SearchPopupWindow : Window
                 ScrollSelectedIntoView();
                 e.Handled = true;
                 break;
-            case Key.Enter:
-                ViewModel.ConfirmCommand.Execute(null);
-                e.Handled = true;
-                break;
-            case Key.Escape:
-                this.Hide();
-                e.Handled = true;
-                break;
             case Key.Left:
             case Key.Right:
-            case Key.Tab:
                 SwitchTab();
                 e.Handled = true;
                 break;
-        }
-    }
-
-    private void Window_KeyDown(object sender, KeyEventArgs e)
-    {
-        switch (e.Key)
-        {
-            case Key.Escape:
-                this.Hide();
-                e.Handled = true;
-                break;
-            case Key.Down:
-                ViewModel.SelectNextCommand.Execute(null);
-                ScrollSelectedIntoView();
-                e.Handled = true;
-                break;
-            case Key.Up:
-                ViewModel.SelectPreviousCommand.Execute(null);
-                ScrollSelectedIntoView();
-                e.Handled = true;
-                break;
             case Key.Enter:
                 ViewModel.ConfirmCommand.Execute(null);
                 e.Handled = true;
                 break;
-            case Key.Left:
-            case Key.Right:
+            case Key.Escape:
+                this.Hide();
+                e.Handled = true;
+                break;
+            case Key.Tab:
                 SwitchTab();
                 e.Handled = true;
                 break;
@@ -134,10 +110,5 @@ public partial class SearchPopupWindow : Window
     private void ResultsList_DoubleClick(object sender, MouseButtonEventArgs e)
     {
         ViewModel.ConfirmCommand.Execute(null);
-    }
-
-    private void Tab_Changed(object sender, RoutedEventArgs e)
-    {
-        SearchInput?.Focus();
     }
 }

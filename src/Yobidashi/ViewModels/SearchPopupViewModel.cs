@@ -41,9 +41,6 @@ public partial class SearchPopupViewModel : ObservableObject
     private readonly ClipboardHistoryService _clipboardHistory;
 
     [ObservableProperty]
-    private string _searchQuery = string.Empty;
-
-    [ObservableProperty]
     private ObservableCollection<PopupDisplayItem> _displayItems = new();
 
     [ObservableProperty]
@@ -68,11 +65,6 @@ public partial class SearchPopupViewModel : ObservableObject
     {
         _snippetRepository = snippetRepository;
         _clipboardHistory = clipboardHistory;
-    }
-
-    partial void OnSearchQueryChanged(string value)
-    {
-        RefreshList();
     }
 
     partial void OnIsClipboardTabChanged(bool value)
@@ -109,9 +101,7 @@ public partial class SearchPopupViewModel : ObservableObject
 
     private void LoadClipboardHistory()
     {
-        var items = string.IsNullOrWhiteSpace(SearchQuery)
-            ? _clipboardHistory.GetHistory()
-            : _clipboardHistory.Search(SearchQuery);
+        var items = _clipboardHistory.GetHistory();
 
         foreach (var entry in items.Take(100))
         {
@@ -128,15 +118,7 @@ public partial class SearchPopupViewModel : ObservableObject
 
     private void LoadSnippets()
     {
-        List<Snippet> list;
-        if (string.IsNullOrWhiteSpace(SearchQuery))
-        {
-            list = _snippetRepository.GetSorted("last_used");
-        }
-        else
-        {
-            list = _snippetRepository.Search(SearchQuery);
-        }
+        var list = _snippetRepository.GetSorted("last_used");
 
         var accentBrush = new SolidColorBrush(Color.FromRgb(0x42, 0x85, 0xF4));
 
@@ -191,7 +173,6 @@ public partial class SearchPopupViewModel : ObservableObject
     /// <summary>ポップアップ表示時の初期化</summary>
     public void Reset()
     {
-        SearchQuery = string.Empty;
         IsClipboardTab = true;
         IsSnippetTab = false;
         RefreshList();

@@ -6,7 +6,7 @@
         WindowStyle="None" AllowsTransparency="True"
         Background="Transparent" Topmost="True"
         ShowInTaskbar="False"
-        KeyDown="Window_KeyDown"
+        PreviewKeyDown="Window_PreviewKeyDown"
         Deactivated="Window_Deactivated">
 
     <Border Background="White" CornerRadius="12" Margin="8"
@@ -18,44 +18,29 @@
         <Grid Margin="12,10,12,8">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
-            <!-- 検索ボックス -->
-            <TextBox x:Name="SearchInput" Grid.Row="0"
-                     Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
-                     FontSize="13" Padding="8,6"
-                     BorderBrush="{StaticResource PrimaryBrush}" BorderThickness="1.5"
-                     Margin="0,0,0,6"
-                     KeyDown="SearchInput_KeyDown">
-                <TextBox.Resources>
-                    <Style TargetType="Border">
-                        <Setter Property="CornerRadius" Value="6"/>
-                    </Style>
-                </TextBox.Resources>
-            </TextBox>
-
             <!-- タブ切り替え -->
-            <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,4">
+            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,4">
                 <RadioButton x:Name="TabClipboard" Content="クリップボード履歴"
                              IsChecked="{Binding IsClipboardTab}"
                              Style="{StaticResource {x:Type RadioButton}}"
                              FontSize="11" Margin="0,0,12,0" Padding="8,4"
-                             Checked="Tab_Changed"/>
+                             Focusable="False"/>
                 <RadioButton x:Name="TabSnippets" Content="定型文"
                              IsChecked="{Binding IsSnippetTab}"
                              Style="{StaticResource {x:Type RadioButton}}"
                              FontSize="11" Padding="8,4"
-                             Checked="Tab_Changed"/>
+                             Focusable="False"/>
                 <TextBlock VerticalAlignment="Center" Margin="16,0,0,0"
                            FontSize="10" Foreground="{StaticResource TextSecondaryBrush}"
                            Text="{Binding ItemCountText}"/>
             </StackPanel>
 
             <!-- 結果一覧 -->
-            <ListBox x:Name="ResultsList" Grid.Row="2"
+            <ListBox x:Name="ResultsList" Grid.Row="1"
                      ItemsSource="{Binding DisplayItems}"
                      SelectedIndex="{Binding SelectedIndex}"
                      BorderThickness="0"
@@ -102,7 +87,7 @@
             </ListBox>
 
             <!-- ヒント -->
-            <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Center"
+            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center"
                         Margin="0,4,0,0">
                 <TextBlock Text="↑↓ 選択" FontSize="9" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,12,0"/>
                 <TextBlock Text="←→ タブ切替" FontSize="9" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,12,0"/>
