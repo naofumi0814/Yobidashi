@@ -19,6 +19,7 @@ public class ExpansionService : IDisposable
     private readonly SnippetRepository _snippetRepository;
     private readonly ExcludedAppRepository _excludedAppRepository;
     private readonly SettingsRepository _settingsRepository;
+    private readonly FocusedTextReader _focusedTextReader;
 
     private bool _isPaused;
     private volatile bool _isExpanding; // 展開中フラグ（自前の入力を無視する）
@@ -59,7 +60,8 @@ public class ExpansionService : IDisposable
         TextExpander textExpander,
         SnippetRepository snippetRepository,
         ExcludedAppRepository excludedAppRepository,
-        SettingsRepository settingsRepository)
+        SettingsRepository settingsRepository,
+        FocusedTextReader focusedTextReader)
     {
         _keyboardHook = keyboardHook;
         _imeDetector = imeDetector;
@@ -68,6 +70,7 @@ public class ExpansionService : IDisposable
         _snippetRepository = snippetRepository;
         _excludedAppRepository = excludedAppRepository;
         _settingsRepository = settingsRepository;
+        _focusedTextReader = focusedTextReader;
 
         // トリガー一致時の処理
         _triggerDetector.TriggerMatched += OnTriggerMatched;
@@ -170,7 +173,7 @@ public class ExpansionService : IDisposable
             {
                 if (scanCode == SC_SPACE || scanCode == SC_TAB)
                 {
-                    _triggerDetector.CheckTrigger();
+                    CheckTriggerWithScreenFallback();
                 }
                 return;
             }
@@ -195,8 +198,8 @@ public class ExpansionService : IDisposable
         {
             case NativeMethods.VK_SPACE:
             case NativeMethods.VK_TAB:
-                // トリガー判定
-                _triggerDetector.CheckTrigger();
+                // トリガー判定（バッファ → 画面テキストの順でフォールバック）
+                CheckTriggerWithScreenFallback();
                 break;
 
             case NativeMethods.VK_BACK:
@@ -344,6 +347,20 @@ public class ExpansionService : IDisposable
             return (char)(vkCode - 0x60 + '0');
         }
 
+        // 記号キー（トリガー接頭辞で使用）
+        // VK_OEM_1 = セミコロン/コロン (US: ;  JP: ;+)
+        if (vkCode == 0xBA)
+        {
+            bool shift = (NativeMethods.GetAsyncKeyState(NativeMethods.VK_SHIFT) & 0x8000) != 0;
+            return shift ? ':' : ';';
+        }
+        // VK_OEM_2 = スラッシュ/クエスチョン (US: /  JP: /)
+        if (vkCode == 0xBF)
+        {
+            bool shift = (NativeMethods.GetAsyncKeyState(NativeMethods.VK_SHIFT) & 0x8000) != 0;
+            return shift ? '?' : '/';
+        }
+
         return null;
     }
 
@@ -353,6 +370,35 @@ public class ExpansionService : IDisposable
             or NativeMethods.VK_UP or NativeMethods.VK_DOWN
             or 0x21 or 0x22 // Page Up/Down
             or 0x23 or 0x24; // End/Home
+    }
+
+    /// <summary>
+    /// バッファ照合を試み、失敗したら画面テキスト(WM_GETTEXT)から照合する
+    /// キーボードフックからはIME確定文字を取得できないため、
+    /// 画面テキストからの直接照合が日本語トリガーの主要な検出手段となる
+    /// </summary>
+    private void CheckTriggerWithScreenFallback()
+    {
+        // 1. まずキーバッファからの照合を試行（ASCII入力向け）
+        if (_triggerDetector.CheckTrigger()) return;
+
+        // 2. バッファで見つからなかった場合、画面テキストから照合
+        try
+        {
+            var textBeforeCursor = _focusedTextReader.ReadTextBeforeCursor();
+            if (textBeforeCursor == null) return;
+
+            var result = _triggerDetector.CheckTriggerFromScreenText(textBeforeCursor);
+            if (result.HasValue)
+            {
+                _triggerDetector.ClearBuffer();
+                OnTriggerMatched(result.Value.snippet, result.Value.displayLength);
+            }
+        }
+        catch
+        {
+            // 画面テキスト取得失敗は静かに無視
+        }
     }
 
     /// <summary>

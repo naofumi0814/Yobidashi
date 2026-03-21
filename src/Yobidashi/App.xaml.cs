@@ -61,6 +61,7 @@ public partial class App : Application
         services.AddSingleton<TriggerDetector>();
         services.AddSingleton<VariableProcessor>();
         services.AddSingleton<TextExpander>();
+        services.AddSingleton<FocusedTextReader>();
         services.AddSingleton<ExpansionService>();
         services.AddSingleton<HotkeyManager>();
         services.AddSingleton<AutoStartManager>();

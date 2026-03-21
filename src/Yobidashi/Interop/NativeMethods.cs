@@ -170,4 +170,18 @@ internal static class NativeMethods
 
     [DllImport("kernel32.dll")]
     public static extern uint GetCurrentThreadId();
+
+    // テキスト取得（WM_GETTEXT / EM_GETSEL）
+    public const uint WM_GETTEXT = 0x000D;
+    public const uint WM_GETTEXTLENGTH = 0x000E;
+    public const uint EM_GETSEL = 0x00B0;
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "SendMessageW")]
+    public static extern IntPtr SendMessageText(IntPtr hWnd, uint Msg, IntPtr wParam, StringBuilder lParam);
+
+    [DllImport("user32.dll", EntryPoint = "SendMessageW")]
+    public static extern IntPtr SendMessageGetSel(IntPtr hWnd, uint Msg, out int wParam, out int lParam);
 }

@@ -135,6 +135,46 @@ public class TriggerDetector
     }
 
     /// <summary>
+    /// 画面上の実テキストからトリガー判定を行う（WM_GETTEXT経由）
+    /// IME経由の日本語テキストはキーボードフックでは取得できないため、
+    /// 画面上の確定済みテキストから直接照合する
+    /// </summary>
+    /// <param name="textBeforeCursor">カーソル位置より前のテキスト</param>
+    /// <returns>一致したスニペットと削除文字数、一致なしならnull</returns>
+    public (Snippet snippet, int displayLength)? CheckTriggerFromScreenText(string textBeforeCursor)
+    {
+        if (string.IsNullOrEmpty(textBeforeCursor)) return null;
+
+        var enabledSnippets = _snippetRepository.GetEnabled();
+        foreach (var snippet in enabledSnippets)
+        {
+            var trigger = snippet.TriggerText;
+            if (string.IsNullOrEmpty(trigger)) continue;
+
+            var normalizedText = _normalizer.Normalize(textBeforeCursor);
+            var normalizedTrigger = _normalizer.Normalize(trigger);
+
+            if (normalizedText.EndsWith(normalizedTrigger))
+            {
+                int triggerStart = normalizedText.Length - normalizedTrigger.Length;
+
+                // 誤爆防止
+                if (triggerStart == 0 ||
+                    char.IsWhiteSpace(normalizedText[triggerStart - 1]) ||
+                    IsPunctuation(normalizedText[triggerStart - 1]) ||
+                    normalizedText[triggerStart - 1] > 0x7F)
+                {
+                    // 画面テキストの場合、トリガー文字数 = 実際の画面表示文字数
+                    int displayLength = trigger.Length;
+                    return (snippet, displayLength);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// 読み文字数に対応する画面表示文字数を計算
     /// セグメントを末尾から遡って、必要な読み文字数分の表示文字数を合算する
     /// </summary>
